@@ -12,7 +12,7 @@ use zstd::Decoder;
 struct Args {
     /// Input FASTA file (supports `.zst` compressed files)
     fasta_file: String,
-    /// k-mer size
+    /// k-mer size (maximum 32 for 64-bit representation)
     k: usize,
     /// Optional: Maximum frequency to display
     #[arg(short, long)]
@@ -28,30 +28,80 @@ fn extract_abundance(header: &str) -> Option<u32> {
     re.captures(header).and_then(|caps| caps.get(1)).map(|m| m.as_str().parse().ok()).flatten()
 }
 
-/// Computes the reverse complement of a DNA sequence
-fn reverse_complement(seq: &str) -> String {
-    seq.chars()
-        .rev()
-        .map(|c| match c {
-            'A' => 'T', 'T' => 'A', 'C' => 'G', 'G' => 'C', _ => 'N'
-        })
-        .collect()
+/// Convert a nucleotide to its 2-bit representation
+const fn nucleotide_to_bits(n: u8) -> Option<u64> {
+    match n {
+        b'A' | b'a' => Some(0b00),
+        b'C' | b'c' => Some(0b01),
+        b'G' | b'g' => Some(0b10),
+        b'T' | b't' => Some(0b11),
+        _ => None,
+    }
 }
 
-/// Generates k-mers, considering canonical representation if required
-fn generate_kmers(seq: &str, k: usize, canonical: bool) -> Vec<String> {
+/// Convert a nucleotide to its complement's 2-bit representation
+const fn complement_to_bits(n: u8) -> Option<u64> {
+    match n {
+        b'A' | b'a' => Some(0b11), // T
+        b'C' | b'c' => Some(0b10), // G
+        b'G' | b'g' => Some(0b01), // C
+        b'T' | b't' => Some(0b00), // A
+        _ => None,
+    }
+}
+
+/// Encodes a DNA sequence into a 64-bit integer
+fn encode_kmer(seq: &[u8], k: usize) -> Option<u64> {
+    if k > 32 || seq.len() < k {
+        return None;
+    }
+    
+    let mut encoded: u64 = 0;
+    for i in 0..k {
+        if let Some(bits) = nucleotide_to_bits(seq[i]) {
+            encoded = (encoded << 2) | bits;
+        } else {
+            return None; // Invalid nucleotide
+        }
+    }
+    Some(encoded)
+}
+
+/// Encodes the reverse complement of a DNA sequence
+fn encode_reverse_complement(seq: &[u8], k: usize) -> Option<u64> {
+    if k > 32 || seq.len() < k {
+        return None;
+    }
+    
+    let mut encoded: u64 = 0;
+    for i in (0..k).rev() {
+        if let Some(bits) = complement_to_bits(seq[i]) {
+            encoded = (encoded << 2) | bits;
+        } else {
+            return None; // Invalid nucleotide
+        }
+    }
+    Some(encoded)
+}
+
+/// Generates k-mers as bit-encoded u64 values, considering canonical representation if required
+fn generate_encoded_kmers(seq: &[u8], k: usize, canonical: bool) -> Vec<u64> {
     if seq.len() < k {
         return vec![];
     }
 
-    let mut kmers: Vec<String> = Vec::new();
+    let mut kmers: Vec<u64> = Vec::new();
     for i in 0..=seq.len() - k {
-        let kmer = seq[i..i + k].to_string();
-        if canonical {
-            let rev_kmer = reverse_complement(&kmer);
-            kmers.push(std::cmp::min(kmer, rev_kmer));
-        } else {
-            kmers.push(kmer);
+        let kmer_slice = &seq[i..i + k];
+        
+        if let Some(encoded) = encode_kmer(kmer_slice, k) {
+            if canonical {
+                if let Some(rev_comp) = encode_reverse_complement(kmer_slice, k) {
+                    kmers.push(std::cmp::min(encoded, rev_comp));
+                }
+            } else {
+                kmers.push(encoded);
+            }
         }
     }
     kmers
@@ -70,11 +120,17 @@ fn open_fasta_file(file_path: &Path) -> std::io::Result<Box<dyn Read>> {
 
 fn main() -> std::io::Result<()> {
     let args = Args::parse();
+    
+    if args.k > 32 {
+        eprintln!("Error: k-mer size cannot exceed 32 for the 64-bit representation");
+        std::process::exit(1);
+    }
+    
     let fasta_path = Path::new(&args.fasta_file);
     let fasta_reader = open_fasta_file(fasta_path)?;
     let reader = fasta::Reader::new(fasta_reader);
     
-    let mut kmer_counts: HashMap<String, u64> = HashMap::new();
+    let mut kmer_counts: HashMap<u64, u64> = HashMap::new();
 
     for result in reader.records() {
         let record = result?;
@@ -83,10 +139,10 @@ fn main() -> std::io::Result<()> {
             record.id(), 
             record.desc().unwrap_or("")
         );
-        let sequence = String::from_utf8_lossy(record.seq());
+        let sequence = record.seq();
         
         if let Some(abundance) = extract_abundance(&header) {
-            let kmers = generate_kmers(&sequence, args.k, args.canonical);
+            let kmers = generate_encoded_kmers(sequence, args.k, args.canonical);
             for kmer in kmers {
                 *kmer_counts.entry(kmer).or_insert(0) += abundance as u64;
             }
