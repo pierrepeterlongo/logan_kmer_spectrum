@@ -25,7 +25,7 @@ Clone the repository and install dependencies:
 ```sh
 git clone https://github.com/your-repo/logan_kmer_spectrum.git
 cd logan_kmer_spectrum
-cargo build --release
+cargo install --path .
 ```
 
 ## Usage
