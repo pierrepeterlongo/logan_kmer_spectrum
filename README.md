@@ -31,19 +31,19 @@ cargo install --path .
 ## Usage
 Run the tool with a FASTA file:
 ```sh
-logan_kmer_spectrum --fasta_file input.fasta --k 31
+logan_kmer_spectrum input.fasta 31
 ```
 For `.zst` compressed FASTA files:
 ```sh
-logan_kmer_spectrum --fasta_file input.fasta.zst --k 31
+logan_kmer_spectrum input.fasta.zst 31
 ```
 To **limit** the maximum frequency displayed:
 ```sh
-logan_kmer_spectrum --fasta_file input.fasta --k 31 --limit 100
+logan_kmer_spectrum input.fasta 31 --limit 100
 ```
 To consider all k-mers as canonical:
 ```
-logan_kmer_spectrum --fasta_file input.fasta --k 31 --canonical
+logan_kmer_spectrum input.fasta 31 --canonical
 ```
 
 ## Output
