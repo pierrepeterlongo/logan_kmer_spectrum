@@ -5,7 +5,7 @@ This Rust program processes a FASTA file (including `.zst` compressed files) to 
 Works for $k \leq 32$.
 
 ## Features
-- if k=31 (as used for constructing logan unitigs or logan contigs), the computation is optimized, the sprectrum is computed only by considering that 31-mers of a sequence occurs only in this sequences, with the abundance provided by the header. 
+- if $k=31$ (as used for constructing logan unitigs or logan contigs), the computation is optimized, the sprectrum is computed only by considering that 31-mers of a sequence occur only in this sequence, with the abundance provided by the header. 
 - Supports **both uncompressed and `.zst` compressed** FASTA files.
 - Extracts **abundance** from FASTA headers in the format:
   ```
@@ -15,7 +15,7 @@ Works for $k \leq 32$.
 - Supports an **optional limit** to restrict output frequencies.
 - Optionally considers all k-mers as **canonical** (i.e., the lexicographically smallest representation between a k-mer and its reverse complement).
 - Not parallelized
-- Not memory efficient (unless k=31)
+- Not memory efficient (unless $k=31$)
 
 
 ## Installation
